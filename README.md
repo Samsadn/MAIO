@@ -1,113 +1,98 @@
-# Assignment 3 — MLOps: Virtual Diabetes Clinic Triage
+````markdown
+# Assignment 3 - MLOps
 
-> **Goal:** Build and ship a small ML service that predicts **short-term diabetes progression** and returns a **continuous risk score**. Everything is reproducible via **GitHub Actions**, containerized with **Docker**, and exposed as a simple HTTP API.
+## Case: Virtual Diabetes Clinic Triage 
 
----
+### Context
+A hospital runs a virtual diabetes clinic. Each week, nurses review hundreds of patient check-ins (vitals, labs, lifestyle notes) to decide who needs a follow-up call. Reviews are manual and time-consuming.
 
-## 📌 Problem Context
+### Goal
+Build a small ML service that predicts short-term disease progression and returns a continuous risk score. The clinic will use the score to prioritize follow-ups. Everything should be built in a pipeline using [GitHub Actions](https://docs.github.com/en/actions).
 
-**Case.** A hospital runs a *virtual diabetes clinic*. Each week, nurses review hundreds of patient check-ins (vitals, labs, lifestyle notes) to decide who needs a follow-up call. Reviews are currently manual and time-consuming.
-
-**What we build.**
-An ML service that predicts a numeric **progression index** (higher = worse), which the triage dashboard uses to sort patients by **descending risk**.
-
-**You own:** training, packaging, testing, releasing, CI/CD, and artifacts.
-
----
-
-## 🧠 Data
-
-We use scikit-learn’s built-in **Diabetes** regression dataset as a stand-in for de-identified EHR features.
+### Data
+For the assignment, use the open scikit-learn Diabetes regression dataset as a stand-in for de-identified EHR features:
 
 ```python
 from sklearn.datasets import load_diabetes
 
 Xy = load_diabetes(as_frame=True)
 X = Xy.frame.drop(columns=["target"])
-y = Xy.frame["target"]  # "progression index" (higher ≈ worse)
-```
+y = Xy.frame["target"]  # acts as a "progression index" (higher = worse)
+````
 
-* **Features** (standardized): `age, sex, bmi, bp, s1, s2, s3, s4, s5, s6`
-* **Target**: `y` (continuous) — interpret as *short-term progression risk*.
-
-> In production, we would train on real outcomes (e.g., HbA1c rise, complications). Here we map the mechanics to a safe open dataset.
+Treat `y` as a progression index: higher values ≈ greater deterioration risk (e.g., rising HbA1c/complications risk).
+In production, a clinic would train on real outcomes; here, we map the same mechanics to a safe, open dataset.
 
 ---
 
-## 🗺️ System at a Glance
+## Users & Flow
 
-```mermaid
-flowchart LR
-  Nurse[Triaging Nurse UI] -- calls --> API[/ML Service/]
-  subgraph API [FastAPI + Uvicorn]
-    PRED[POST /predict]
-    HLTH[GET /health]
-  end
-  API --> Model[(Model + Preproc)]
-  CI[GitHub Actions] -->|Train/Package/Test| GHCR[(GHCR Image)]
-  GHCR -->|pull image| API
-  Nurse -->|sorted by risk desc.| PRED
-```
+* **Triage Nurse** opens a dashboard sorted by predicted progression (descending).
+* **ML Service** hosts `/predict` that the dashboard calls for each patient.
+* **MLOps Team (you)** owns training, packaging, testing, and releasing the service.
 
 ---
 
-## ✅ Acceptance Criteria (What will be tested)
+## Non-functional Constraints
 
-1. **Pull & run images** from GHCR:
-
-   * `ghcr.io/<org>/<repo>:v0.1`
-   * `ghcr.io/<org>/<repo>:v0.2`
-2. **Health check**
-
-   * `GET /health` → `{"status":"ok","model_version":"<semver-or-hash>"}`
-3. **Prediction**
-
-   * `POST /predict` with JSON features returns a float:
-
-     ```json
-     {
-       "age": 0.02, "sex": -0.044, "bmi": 0.06, "bp": -0.03,
-       "s1": -0.02, "s2": 0.03, "s3": -0.02, "s4": 0.02,
-       "s5": 0.02, "s6": -0.001
-     }
-     ```
-
-     → `{"prediction": <float>}`
-
-     * Exact field names and response shape are documented below.
-4. **v0.2 shows justified improvement** with metrics & rationale (in `CHANGELOG.md` and GitHub Release notes).
+* **Portability:** Docker image must be self-contained.
+* **Observability:** Return JSON errors on bad input.
+* **Reproducibility:** Same code + GitHub Actions should retrain and rebuild deterministically.
 
 ---
 
-## 🧪 Iteration Plan
+## Iteration Plan
 
-### v0.1 — Baseline
+### Iteration 1 (v0.1) — Baseline
 
-* **Pipeline:** `StandardScaler` + **LinearRegression**
-* **Metric:** RMSE on a held-out split
-* **Ship:** working API, Docker image (`:v0.1`), health endpoint, JSON errors on bad input
+Simple `StandardScaler` + `LinearRegression`.
+Report RMSE on a held-out split.
+Ship a working API & Docker image.
 
-### v0.2 — Improvement
+### Iteration 2 (v0.2) — Improvement
 
-* **Model upgrades:** try `Ridge` and/or `RandomForestRegressor`, and/or improved preprocessing
-* **(Optional)** Convert to binary high-risk flag (threshold on prediction) and **calibrate**
-* **Report deltas:** RMSE (and if flag added, `precision/recall@threshold`) in `CHANGELOG.md`
+Try `Ridge` / `RandomForestRegressor` or better preprocessing (feature scaling/selection),
+plus calibration of the score if you convert to a “high-risk” flag (e.g., threshold on predicted progression).
+Show metric deltas (RMSE; if you add a flag, also precision/recall at a threshold) in `CHANGELOG.md`.
 
 ---
 
-## 📦 API Contract
+## Grading
 
-### `GET /health`
+### CI pipeline quality (3.0)
 
-* **200 OK**
+Runs on PR/push, fails on lint/tests, artifacts uploaded; tag workflow builds image, runs container smoke tests, publishes GitHub Release & GHCR.
+
+### Training & reproducibility (2.0)
+
+Seeds set; env pinned; metrics logged & saved; clear instructions to reproduce locally.
+
+### Docker image quality (2.0)
+
+Self-contained (model baked in), starts quickly, correct port exposed, reasonable size (slim or multi-stage), optional healthcheck.
+
+### Iteration quality & evidence (2.0)
+
+Clear v0.1 → v0.2 improvement (accuracy/latency/size/etc.).
+`CHANGELOG.md` shows what changed and why, with side-by-side metrics.
+
+### Documentation & collaboration (1.0)
+
+`README` (exact run commands, sample payload), tidy commit history/PRs.
+
+---
+
+## Acceptance (What I’ll Test)
+
+* I can pull the GitHub Release image (`ghcr.io/<org>/<repo>:v0.1` and `:v0.2`) and run it locally.
+
+* `GET /health` returns:
 
   ```json
-  { "status": "ok", "model_version": "v0.1" }
+  {"status": "ok", "model_version": "..."}
   ```
 
-### `POST /predict`
-
-* **Request Body** *(all fields required; floats)*:
+* `POST /predict` with a JSON of the diabetes features returns a numeric prediction:
 
   ```json
   {
@@ -117,183 +102,26 @@ flowchart LR
   }
   ```
 
-  > These are the **standardized** feature names from `load_diabetes`.
-
-* **Response**
+  →
 
   ```json
-  { "prediction": 123.456, "model_version": "v0.1" }
+  {"prediction": <float>}
   ```
 
-* **Errors** (observability): JSON with message & details
+  *(Document your exact field names and response shape).*
 
-  ```json
-  { "error": "ValidationError", "detail": "Missing field: bmi" }
-  ```
-
-**Sample cURL**
-
-```bash
-curl -s http://localhost:8080/health
-
-curl -s -X POST http://localhost:8080/predict \
-  -H "Content-Type: application/json" \
-  -d '{"age":0.02,"sex":-0.044,"bmi":0.06,"bp":-0.03,"s1":-0.02,"s2":0.03,"s3":-0.02,"s4":0.02,"s5":0.02,"s6":-0.001}'
-```
+* The `v0.2` image shows a justified improvement (metrics + short rationale).
 
 ---
 
-## 🚀 Quickstart (Local)
+## Hand-in
 
-```bash
-# 1) Setup
-python -m venv .venv && source .venv/bin/activate
-pip install -U pip
-pip install -e .[dev]     # installs app, training, tests
+* **GitHub repository URL** (upload the link in a PDF here) — public.
 
-# 2) Train baseline (v0.1)
-python scripts/train.py --model linear --seed 42 --out artifacts/model_v0.1.joblib
-# saves metrics to artifacts/metrics_v0.1.json
+### The Actions tab must show:
 
-# 3) Serve
-MODEL_PATH=artifacts/model_v0.1.joblib uvicorn app.main:app --host 0.0.0.0 --port 8080
-```
-
-**Makefile (optional)**
-
-```makefile
-train:
-\tpython scripts/train.py --model linear --seed 42 --out artifacts/model_v0.1.joblib
-serve:
-\tMODEL_PATH=artifacts/model_v0.1.joblib uvicorn app.main:app --host 0.0.0.0 --port 8080
-test:
-\tpytest -q
-docker-build:
-\tdocker build -t ghcr.io/<org>/<repo>:v0.1 .
-docker-run:
-\tdocker run -p 8080:8080 ghcr.io/<org>/<repo>:v0.1
-```
-
----
-
-## 🐳 Docker
-
-* **Self-contained** image (model baked in at build time)
-* **FastAPI + Uvicorn** server
-* **Exposed port:** `8080`
-* **Healthcheck:** optional (recommended)
-
-**Example**
-
-```bash
-docker build -t ghcr.io/<org>/<repo>:v0.1 --build-arg MODEL_PATH=artifacts/model_v0.1.joblib .
-docker run --rm -p 8080:8080 ghcr.io/<org>/<repo>:v0.1
-```
-
----
-
-## 🔁 CI/CD (GitHub Actions)
-
-* **PR/Push workflow (`.github/workflows/ci.yml`)**
-
-  * Lint (`ruff`/`flake8`), format (`black` check), unit tests (`pytest`)
-  * Quick training smoke (small split) to ensure pipeline works
-  * Upload artifacts (trained model + metrics) to the workflow run
-
-* **Tag workflow (`.github/workflows/release.yml`)** triggers on `v*` tags
-
-  * Reproducible train with fixed seeds and pinned env
-  * Build Docker image with baked-in model
-  * Container smoke tests (`/health`, `/predict`)
-  * Push image to **GHCR**
-  * Publish **GitHub Release** with metrics + `CHANGELOG.md` entry
-
-**Badges (optional)**
-
-```md
-![CI](https://github.com/<org>/<repo>/actions/workflows/ci.yml/badge.svg)
-![Release](https://github.com/<org>/<repo>/actions/workflows/release.yml/badge.svg)
-```
-
----
-
-## 🔬 Reproducibility
-
-* **Seeds:** fixed everywhere (`numpy`, `sklearn`, training script)
-* **Environment pinned:** `requirements.txt` / `poetry.lock`
-* **Deterministic splits:** `train_test_split(random_state=42)`
-* **Artifacts:** `artifacts/model_*.joblib`, `artifacts/metrics_*.json`
-* **Docs:** exact run commands in this README
-
----
-
-## 📈 Metrics & Evidence
-
-* **Primary metric:** RMSE (regression)
-* **v0.2** (if you add a high-risk flag): report **precision/recall@threshold** and how threshold chosen (e.g., optimize F1 or recall).
-* Add a side-by-side table in `CHANGELOG.md`:
-
-```md
-## [v0.2] - 2025-10-13
-### Changed
-- Switched LinearRegression → Ridge(alpha=1.0) and added feature scaling refinements.
-- RMSE improved: **v0.1 = 58.2 → v0.2 = 55.7** (−4.3%)
-- Rationale: Ridge reduces variance; cross-val suggested best alpha≈1.0.
-
-| Version | Model                | RMSE | Notes                 |
-|--------:|----------------------|-----:|-----------------------|
-| v0.1    | LinearRegression     | 58.2 | baseline              |
-| v0.2    | Ridge(alpha=1.0)     | 55.7 | better generalization |
-```
-
----
-
-## 🧩 Project Structure
+* **PR/push workflow:** lint, unit tests, quick training smoke, artifacts.
+* **Tag workflow (v*):** builds the Docker image, runs container smoke tests, pushes to GHCR, and publishes a GitHub Release with metrics/changelog.
 
 ```
-.
-├─ app/
-│  ├─ main.py            # FastAPI app (health/predict)
-│  ├─ schemas.py         # Pydantic request/response models
-│  └─ model_io.py        # load model/preproc from disk
-├─ scripts/
-│  └─ train.py           # training entrypoint (saves model + metrics)
-├─ tests/
-│  ├─ test_api.py        # API contract & error cases
-│  └─ test_train.py      # training smoke tests
-├─ artifacts/            # saved models + metrics (ignored in git, attached in releases)
-├─ Dockerfile
-├─ requirements.txt / pyproject.toml
-├─ CHANGELOG.md
-└─ README.md
 ```
-
----
-
-## 🔒 Non-Functional Requirements
-
-* **Portability:** Docker image is self-contained (model baked in)
-* **Observability:** All errors return structured **JSON**
-* **Reproducibility:** Same code + GH Actions retrain & rebuild deterministically
-
----
-
-## 📝 Grading Rubric (Mapping)
-
-* **CI pipeline quality (3.0):** PR/push runs lint/tests, uploads artifacts; tag workflow builds image, runs container smoke tests, publishes Release & GHCR
-* **Training & reproducibility (2.0):** fixed seeds, pinned env, metrics logged/saved, clear local reproduction instructions
-* **Docker image quality (2.0):** model baked in, fast start, correct port, slim/multi-stage, optional healthcheck
-* **Iteration quality & evidence (2.0):** clear v0.1 → v0.2 improvements + `CHANGELOG.md` deltas
-* **Docs & collaboration (1.0):** this README with exact commands & sample payload; tidy commits/PRs
-
----
-
-## 📨 Hand-in
-
-* **Public GitHub repository URL** (upload the link in PDF)
-* **Actions tab must show:**
-
-  * **PR/Push workflow**: lint, tests, quick training smoke, artifacts
-  * **Tag workflow (`v*`)**: build Docker, container smoke tests, push to GHCR, publish Release with metrics/changelog
-
----
