@@ -7,14 +7,13 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE: ghcr.io/${{ github.repository }}:${{ github.ref_name }}
 
 jobs:
   release:
     runs-on: ubuntu-latest
     permissions:
-      contents: write     # needed to create GitHub Release
-      packages: write     # needed to push to GHCR
+      contents: write
+      packages: write
 
     steps:
       - name: Checkout Code
@@ -30,7 +29,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      # Train here (don’t rely on CI artifacts from another run)
       - name: Train model for this tag
         env:
           MODEL_VERSION: "${{ github.ref_name }}"
@@ -47,28 +45,29 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # 👇 NEW: compute lowercase image tag once and reuse
-      - name: Set lowercase IMAGE tag
+      # ✅ Compute lowercase image as a **step output** (usable in `with:`)
+      - name: Compute lowercase image tag
+        id: img
         run: |
-          IMAGE_LC=$(echo "${{ env.IMAGE }}" | tr '[:upper:]' '[:lower:]')
-          echo "IMAGE_LC=$IMAGE_LC" >> $GITHUB_ENV
-          echo "Using image: $IMAGE_LC"
-
+          lower_repo="$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')"
+          echo "image=${{ env.REGISTRY }}/${lower_repo}:${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          echo "IMAGE=${{ env.REGISTRY }}/${lower_repo}:${{ github.ref_name }}"
+      
       - name: Build Docker Image (bakes artifacts)
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
           push: false
-          tags: ${{ env.IMAGE_LC }}
+          tags: ${{ steps.img.outputs.image }}
 
       - name: Smoke test container
+        env:
+          IMAGE: ${{ steps.img.outputs.image }}   # make it available to the shell
         run: |
-          docker run -d -p 8000:8000 --name smoke "$IMAGE_LC"
+          docker run -d -p 8000:8000 --name smoke "$IMAGE"
           sleep 5
-          # Health (must be 200)
           curl -fsS http://localhost:8000/health
-          # Predict (must be 200)
           curl -fsS -X POST http://localhost:8000/predict \
             -H "Content-Type: application/json" \
             -d '{"age":0.02,"sex":-0.044,"bmi":0.06,"bp":-0.03,"s1":-0.02,"s2":0.03,"s3":-0.02,"s4":0.02,"s5":0.02,"s6":-0.001}'
@@ -80,7 +79,7 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
-          tags: ${{ env.IMAGE_LC }}
+          tags: ${{ steps.img.outputs.image }}
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -90,6 +89,6 @@ jobs:
           files: artifacts/metrics.json
           body: |
             Release ${{ github.ref_name }}
-            - Image: ${{ env.IMAGE_LC }}
+            - Image: ${{ steps.img.outputs.image }}
             - Metrics attached (metrics.json).
             - See CHANGELOG.md for details.
