@@ -47,17 +47,24 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # 👇 NEW: compute lowercase image tag once and reuse
+      - name: Set lowercase IMAGE tag
+        run: |
+          IMAGE_LC=$(echo "${{ env.IMAGE }}" | tr '[:upper:]' '[:lower:]')
+          echo "IMAGE_LC=$IMAGE_LC" >> $GITHUB_ENV
+          echo "Using image: $IMAGE_LC"
+
       - name: Build Docker Image (bakes artifacts)
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
           push: false
-          tags: ${{ env.IMAGE }}
+          tags: ${{ env.IMAGE_LC }}
 
       - name: Smoke test container
         run: |
-          docker run -d -p 8000:8000 --name smoke "$IMAGE"
+          docker run -d -p 8000:8000 --name smoke "$IMAGE_LC"
           sleep 5
           # Health (must be 200)
           curl -fsS http://localhost:8000/health
@@ -73,7 +80,7 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
-          tags: ${{ env.IMAGE }}
+          tags: ${{ env.IMAGE_LC }}
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -83,6 +90,6 @@ jobs:
           files: artifacts/metrics.json
           body: |
             Release ${{ github.ref_name }}
-            - Image: ${{ env.IMAGE }}
+            - Image: ${{ env.IMAGE_LC }}
             - Metrics attached (metrics.json).
             - See CHANGELOG.md for details.
