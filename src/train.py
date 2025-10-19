@@ -1,7 +1,6 @@
 # training entrypoint (v0.1 / v0.2)
 import json
 import joblib
-from pathlib import Path
 from sklearn.datasets import load_diabetes
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
