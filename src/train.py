@@ -43,7 +43,10 @@ def train_and_save_model():
 
     # 5. Evaluate performance
     y_pred = pipeline.predict(X_test)
-    rmse = float(mean_squared_error(y_test, y_pred, squared=False))
+
+    # Version-agnostic RMSE: compute MSE then sqrt (no 'squared' kwarg)
+    mse = mean_squared_error(y_test, y_pred)
+    rmse = float(mse ** 0.5)
 
     # 6. Save artifacts
     joblib.dump(pipeline, CONFIG.model_path)
