@@ -1,5 +1,4 @@
 # tests/test_api_endpoints.py
-import json
 import os
 import shutil
 from pathlib import Path

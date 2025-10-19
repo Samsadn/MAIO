@@ -1,5 +1,4 @@
 # training entrypoint (v0.1 / v0.2)
-import pandas as pd
 import json
 import joblib
 
