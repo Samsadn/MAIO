@@ -1,7 +1,7 @@
 # training entrypoint (v0.1 / v0.2)
 import json
 import joblib
-
+from pathlib import Path
 from sklearn.datasets import load_diabetes
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
@@ -9,66 +9,63 @@ from sklearn.linear_model import LinearRegression
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import mean_squared_error
 
-# --- Configuration for Reproducibility ---
-RANDOM_STATE = 42
-MODEL_VERSION = "v0.1"
-MODEL_PATH = "artifacts/model.joblib"
-METRICS_PATH = "artifacts/metrics.json"
+# Import shared configuration
+from .config import CONFIG
 
 
 def train_and_save_model():
     """
     Loads the diabetes dataset, trains the v0.1 pipeline (StandardScaler + LinearRegression),
-    evaluates RMSE, and saves the model and metrics artifacts.
+    evaluates RMSE, and saves the model and metrics artifacts defined in CONFIG.
     """
-    # 1. Load Data
-    # Xy.frame: DataFrame containing features (X) and target (y)
+    # Ensure artifacts directory exists
+    CONFIG.artifacts_dir.mkdir(parents=True, exist_ok=True)
+
+    # 1. Load data
     Xy = load_diabetes(as_frame=True)
     X = Xy.frame.drop(columns=["target"])
     y = Xy.frame["target"]
-    
-    # 2. Split Data (using fixed random state for reproducibility)
+
+    # 2. Split data (using CONFIG.seed for reproducibility)
     X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=RANDOM_STATE
+        X, y, test_size=0.2, random_state=CONFIG.seed
     )
 
-    # 3. Define the v0.1 Baseline Pipeline
-    # Constraint: simple StandardScaler + LinearRegression
+    # 3. Define baseline pipeline (v0.1)
     pipeline = Pipeline([
         ('scaler', StandardScaler()),
         ('regressor', LinearRegression())
     ])
 
-    # 4. Train Model
+    # 4. Train model
     print("Starting model training...")
     pipeline.fit(X_train, y_train)
     print("Training complete.")
 
-    # 5. Evaluate Performance
+    # 5. Evaluate performance
     y_pred = pipeline.predict(X_test)
-    
-    # Calculate Mean Squared Error (MSE) 
-    mse = mean_squared_error(y_test, y_pred) 
-    # Calculate Root Mean Squared Error (RMSE) by taking the square root 
-    rmse = mse ** 0.5
-    
-    # 6. Save Artifacts
-    
-    # Save the trained pipeline
-    joblib.dump(pipeline, MODEL_PATH)
-    print(f"Model saved to {MODEL_PATH}")
+    rmse = float(mean_squared_error(y_test, y_pred, squared=False))
 
-    # Save metrics for logging and CHANGELOG.md
+    # 6. Save artifacts
+    joblib.dump(pipeline, CONFIG.model_path)
+    print(f"Model saved to {CONFIG.model_path}")
+
     metrics = {
-        "version": MODEL_VERSION,
-        "rmse": float(rmse),
-        "random_state": RANDOM_STATE,
+        "version": CONFIG.model_version,
+        "rmse": rmse,
+        "random_state": CONFIG.seed,
         "model_type": "LinearRegression"
     }
-    with open(METRICS_PATH, "w") as f:
-        json.dump(metrics, f, indent=4)
-    print(f"Metrics saved to {METRICS_PATH}")
+    CONFIG.metrics_path.write_text(json.dumps(metrics, indent=4))
+    print(f"Metrics saved to {CONFIG.metrics_path}")
+
+    return metrics
+
+
+def main():
+    """Wrapper entrypoint so tests and CI can call train.main()."""
+    return train_and_save_model()
 
 
 if __name__ == "__main__":
-    train_and_save_model()
+    main()
