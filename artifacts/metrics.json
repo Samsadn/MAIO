@@ -1,6 +1,6 @@
 {
-    "version": "v0.1",
-    "rmse": 53.85344583676594,
-    "random_state": 42,
-    "model_type": "LinearRegression"
+  "version": "v0.2.0",
+  "rmse": 53.77745406534389,
+  "random_state": 42,
+  "model_type": "Ridge"
 }
