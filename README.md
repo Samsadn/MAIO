@@ -149,7 +149,6 @@ docker run -p 8000:8000 ghcr.io/samsadn/maio:v0.2.1
 
 ### 🧾 References
 
-* scikit-learn Diabetes Dataset Documentation
 * [FastAPI](https://fastapi.tiangolo.com/)
 * [GitHub Actions](https://docs.github.com/en/actions)
 * [Docker](https://docs.docker.com/)
