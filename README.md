@@ -1,127 +1,157 @@
 ````markdown
-# Assignment 3 - MLOps
+# Assignment 3 – MLOps  
+## Virtual Diabetes Clinic Triage
 
-## Case: Virtual Diabetes Clinic Triage 
+### 📘 Context
+Söderstad Hospital runs a virtual diabetes clinic where nurses review hundreds of weekly patient check-ins (vitals, labs, and lifestyle notes) to decide who needs a follow-up call.  
+These reviews are currently **manual and time-consuming**.
 
-### Context
-A hospital runs a virtual diabetes clinic. Each week, nurses review hundreds of patient check-ins (vitals, labs, lifestyle notes) to decide who needs a follow-up call. Reviews are manual and time-consuming.
+### 🎯 Goal
+The objective is to build a **machine learning service** that predicts a patient's short-term risk of disease progression and outputs a **continuous risk score**.  
+The clinic will use this score to prioritize patients who may need faster intervention.
 
-### Goal
-Build a small ML service that predicts short-term disease progression and returns a continuous risk score. The clinic will use the score to prioritize follow-ups. Everything should be built in a pipeline using [GitHub Actions](https://docs.github.com/en/actions).
+All components — training, packaging, testing, and releasing — are automated through **GitHub Actions** CI/CD pipelines.
 
-### Data
-For the assignment, use the open scikit-learn Diabetes regression dataset as a stand-in for de-identified EHR features:
+---
+
+### 📊 Data
+The project uses the open **scikit-learn Diabetes regression dataset** as a proxy for de-identified electronic health record (EHR) data.
 
 ```python
 from sklearn.datasets import load_diabetes
 
 Xy = load_diabetes(as_frame=True)
 X = Xy.frame.drop(columns=["target"])
-y = Xy.frame["target"]  # acts as a "progression index" (higher = worse)
+y = Xy.frame["target"]  # progression index (higher = worse)
 ````
 
-Treat `y` as a progression index: higher values ≈ greater deterioration risk (e.g., rising HbA1c/complications risk).
-In production, a clinic would train on real outcomes; here, we map the same mechanics to a safe, open dataset.
+The dataset mimics features like blood pressure, BMI, and cholesterol ratios that can influence diabetes progression.
 
 ---
 
-## Users & Flow
+### ⚙️ Pipeline Overview
 
-* **Triage Nurse** opens a dashboard sorted by predicted progression (descending).
-* **ML Service** hosts `/predict` that the dashboard calls for each patient.
-* **MLOps Team (you)** owns training, packaging, testing, and releasing the service.
-
----
-
-## Non-functional Constraints
-
-* **Portability:** Docker image must be self-contained.
-* **Observability:** Return JSON errors on bad input.
-* **Reproducibility:** Same code + GitHub Actions should retrain and rebuild deterministically.
+| Stage                               | Description                                                                                                                                                    |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Training (`src/train.py`)**       | Loads dataset, splits data, trains a scikit-learn pipeline (`StandardScaler` + `LinearRegression` or `Ridge`), computes RMSE, and saves the model and metrics. |
+| **Serving (`src/api.py`)**          | FastAPI service exposing two endpoints: `/health` and `/predict`.                                                                                              |
+| **Schemas (`src/schemas.py`)**      | Defines input/output Pydantic models for API validation.                                                                                                       |
+| **Configuration (`src/config.py`)** | Centralized configuration for reproducibility and artifact paths.                                                                                              |
+| **CI/CD Workflows**                 | Automates linting, testing, training, Docker build, smoke tests, and GHCR release.                                                                             |
 
 ---
 
-## Iteration Plan
+### 🧠 Model Versions
 
-### Iteration 1 (v0.1) — Baseline
+| Version    | Model                                 | RMSE          | Notes                                |
+| ---------- | ------------------------------------- | ------------- | ------------------------------------ |
+| **v0.1.0** | `StandardScaler` + `LinearRegression` | *e.g., 54.82* | Baseline model.                      |
+| **v0.2.0** | `StandardScaler` + `Ridge(alpha=1.0)` | *e.g., 52.47* | Improved regularization, lower RMSE. |
 
-Simple `StandardScaler` + `LinearRegression`.
-Report RMSE on a held-out split.
-Ship a working API & Docker image.
-
-### Iteration 2 (v0.2) — Improvement
-
-Try `Ridge` / `RandomForestRegressor` or better preprocessing (feature scaling/selection),
-plus calibration of the score if you convert to a “high-risk” flag (e.g., threshold on predicted progression).
-Show metric deltas (RMSE; if you add a flag, also precision/recall at a threshold) in `CHANGELOG.md`.
+Each model is saved in `/artifacts` and baked into the Docker image at release.
 
 ---
 
-## Grading
+### 🧪 API Endpoints
 
-### CI pipeline quality (3.0)
+#### **GET /health**
 
-Runs on PR/push, fails on lint/tests, artifacts uploaded; tag workflow builds image, runs container smoke tests, publishes GitHub Release & GHCR.
+Returns the service status and model version.
 
-### Training & reproducibility (2.0)
+**Example Response**
 
-Seeds set; env pinned; metrics logged & saved; clear instructions to reproduce locally.
-
-### Docker image quality (2.0)
-
-Self-contained (model baked in), starts quickly, correct port exposed, reasonable size (slim or multi-stage), optional healthcheck.
-
-### Iteration quality & evidence (2.0)
-
-Clear v0.1 → v0.2 improvement (accuracy/latency/size/etc.).
-`CHANGELOG.md` shows what changed and why, with side-by-side metrics.
-
-### Documentation & collaboration (1.0)
-
-`README` (exact run commands, sample payload), tidy commit history/PRs.
-
----
-
-## Acceptance (What I’ll Test)
-
-* I can pull the GitHub Release image (`ghcr.io/<org>/<repo>:v0.1` and `:v0.2`) and run it locally.
-
-* `GET /health` returns:
-
-  ```json
-  {"status": "ok", "model_version": "..."}
-  ```
-
-* `POST /predict` with a JSON of the diabetes features returns a numeric prediction:
-
-  ```json
-  {
-    "age": 0.02, "sex": -0.044, "bmi": 0.06, "bp": -0.03,
-    "s1": -0.02, "s2": 0.03, "s3": -0.02, "s4": 0.02,
-    "s5": 0.02, "s6": -0.001
-  }
-  ```
-
-  →
-
-  ```json
-  {"prediction": <float>}
-  ```
-
-  *(Document your exact field names and response shape).*
-
-* The `v0.2` image shows a justified improvement (metrics + short rationale).
-
----
-
-## Hand-in
-
-* **GitHub repository URL** (upload the link in a PDF here) — public.
-
-### The Actions tab must show:
-
-* **PR/push workflow:** lint, unit tests, quick training smoke, artifacts.
-* **Tag workflow (v*):** builds the Docker image, runs container smoke tests, pushes to GHCR, and publishes a GitHub Release with metrics/changelog.
-
+```json
+{"status": "ok", "model_version": "v0.2.0"}
 ```
+
+#### **POST /predict**
+
+Predicts short-term disease progression based on numeric input features.
+
+**Example Request**
+
+```json
+{
+  "age": 0.02, "sex": -0.044, "bmi": 0.06, "bp": -0.03,
+  "s1": -0.02, "s2": 0.03, "s3": -0.02, "s4": 0.02, "s5": 0.02, "s6": -0.001
+}
 ```
+
+**Example Response**
+
+```json
+{"prediction": 156.78}
+```
+
+---
+
+### 🧰 Local Development
+
+#### **Train the model**
+
+```bash
+python -m src.train
+```
+
+#### **Run the API**
+
+```bash
+uvicorn src.api:app --host 0.0.0.0 --port 8000
+```
+
+#### **Test the API**
+
+```bash
+curl http://localhost:8000/health
+
+curl -X POST http://localhost:8000/predict \
+  -H "Content-Type: application/json" \
+  -d '{"age":0.02,"sex":-0.044,"bmi":0.06,"bp":-0.03,"s1":-0.02,"s2":0.03,"s3":-0.02,"s4":0.02,"s5":0.02,"s6":-0.001}'
+```
+
+---
+
+### 🐳 Docker Usage
+
+#### **Build and run locally**
+
+```bash
+docker build -t diabetes-triage .
+docker run -p 8000:8000 diabetes-triage
+```
+
+#### **Pull released image (from GHCR)**
+
+```bash
+docker pull ghcr.io/samsadn/maio:v0.2.1
+docker run -p 8000:8000 ghcr.io/samsadn/maio:v0.2.1
+```
+
+---
+
+### 🔄 CI/CD Summary
+
+| Workflow                    | Trigger      | Purpose                                                                             |
+| --------------------------- | ------------ | ----------------------------------------------------------------------------------- |
+| **CI (`ci.yml`)**           | On push / PR | Runs linting (`ruff`), pytest, and uploads artifacts.                               |
+| **Release (`release.yml`)** | On tag (v*)  | Retrains, builds Docker, smoke-tests, pushes to GHCR, and publishes GitHub Release. |
+
+---
+
+### 🧮 Reproducibility
+
+* Fixed random seed (`42`)
+* Versioned artifacts in `/artifacts`
+* Pinned dependencies in `requirements.txt`
+* Deterministic CI build & release pipelines
+
+---
+
+### 🧾 References
+
+* scikit-learn Diabetes Dataset Documentation
+* [FastAPI](https://fastapi.tiangolo.com/)
+* [GitHub Actions](https://docs.github.com/en/actions)
+* [Docker](https://docs.docker.com/)
+
+---
